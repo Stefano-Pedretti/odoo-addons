@@ -8,7 +8,7 @@ from odoo.exceptions import ValidationError
 from odoo import api, fields, models
 from odoo.tools.safe_eval import safe_eval
 from odoo.tools.translate import _
-from urlparse import urlparse
+import urllib
 
 _logger = logging.getLogger(__name__)
 try:
@@ -26,7 +26,7 @@ class CasBaseConfigSettings(models.TransientModel):
     to manage settings of the CAS server.
     """
 
-    _inherit = 'base.config.settings'
+    _inherit = 'res.config.settings'
     cas_activated = fields.Boolean(
         'CAS authentication activated',
         help='The CAS authentication only works if you are in a single'
@@ -39,7 +39,7 @@ class CasBaseConfigSettings(models.TransientModel):
         help='Automatically create local user accounts for'
              ' new users authenticating via CAS', default=True)
 
-    # Getter is required for fields stored in base.config.settings
+    # Getter is required for fields stored in res.config.settings
     @api.model
     def get_default_cas_values(self, fields):
         icp = self.env['ir.config_parameter']
@@ -109,13 +109,14 @@ class CasBaseConfigSettings(models.TransientModel):
         message = 'Parameters are incorrect\nThere seems to be an ' \
                   'error in the configuration.'
         error_message = ''
-        if self.cas_server_port == -1:
+        if self.cas_server_port == 0:
             cas_server = self.cas_server
         else:
-            url_server = urlparse(self.cas_server)
-            cas_server = \
-                url_server.scheme + '://' + url_server.netloc + \
-                ':' + str(self.cas_server_port) + url_server.path
+            url_server = urllib.parse.urlparse(self.cas_server)
+            #TODO review
+            # cas_server = url_server.scheme + '://' + url_server.netloc + ':' + str(self.cas_server_port) + url_server.path
+            cas_server = self.cas_server
+            
         try:
             # The login function, from pycas,returns 3 if the host is
             # a CAS host and if parameters given are bad
@@ -126,10 +127,11 @@ class CasBaseConfigSettings(models.TransientModel):
                 title = 'cas_check_success'
                 message = 'Parameters are correct\nThe CAS server is well ' \
                           'configured'
-        except Exception, e:
+        except Exception as e:
             _logger.debug(e)
             error_message = e
+
         # At the moment, I only found this method
         # in order to show a message after a request
-        raise ValidationError(_(title) + '\n' + _(message) + '\n' + _(
+        raise ValidationError(_(title) + '\n' + cas_server + '\n' + _(message) + '\n' + _(
             error_message))

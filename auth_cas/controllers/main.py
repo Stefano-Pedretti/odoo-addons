@@ -5,9 +5,10 @@
 
 import urllib
 from odoo.addons.web.controllers.main import login_and_redirect
-from openid.cryptutil import randomString
+#from openid.cryptutil import randomString
 from odoo.exceptions import AccessDenied
-import urlparse
+#import urlparse
+import urllib.parse
 
 from ..pycas import login
 
@@ -20,6 +21,14 @@ import logging
 
 _logger = logging.getLogger(__name__)
 
+def randomString(length, chrs=None):
+    """Produce a string of length random bytes, chosen from chrs."""
+    if chrs is None:
+        return getBytes(length)
+    else:
+        n = len(chrs)
+        return ''.join([chrs[randrange(n)] for _ in range(length)])
+
 
 class Controller(http.Controller):
 
@@ -28,10 +37,10 @@ class Controller(http.Controller):
         """ Retrieves the module config for the CAS authentication. """
         icp = request.env['ir.config_parameter'].sudo()
         config = {
-            'login_cas': icp.get_param('cas_auth.cas_activated'),
-            'host': icp.get_param('cas_auth.cas_server'),
-            'port': icp.get_param('cas_auth.cas_server_port'),
-            'auto_create': icp.get_param('cas_auth.cas_create_user'),
+            'login_cas': str(icp.get_param('cas_auth.cas_activated')),
+            'host': str(icp.get_param('cas_auth.cas_server')),
+            'port': str(icp.get_param('cas_auth.cas_server_port')),
+            'auto_create': str(icp.get_param('cas_auth.cas_create_user')),
         }
 
         return config
@@ -41,9 +50,9 @@ class Controller(http.Controller):
         url = request.httprequest.url
 
         def qs(url):
-            query = urlparse.urlparse(url).query
+            query = urllib.parse.urlparse(url).query
             res = dict(
-                [(k, v[0]) for k, v in urlparse.parse_qs(query).items()])
+                [(k, v[0]) for k, v in urllib.parse.parse_qs(query).items()])
             res1 = {}
             if res.get('redirect', {}):
                 res1 = qs(res.get('redirect', {}))
@@ -60,7 +69,7 @@ class Controller(http.Controller):
         service_url = request.httprequest.url_root
         cas_login = \
             config.get('host') + ':' + config.get('port') + \
-            '/cas/login?service=' + service_url
+            '/cas/login?service=' + service_url        
         # response
         return werkzeug.utils.redirect(cas_login)
 
@@ -74,11 +83,11 @@ class Controller(http.Controller):
         if cas_port == -1:
             cas_server = cas_host
         else:
-            url_server = urlparse.urlparse(cas_host)
+            url_server = urllib.parse.urlparse(cas_host)
             cas_server = \
                 url_server.scheme + '://' + url_server.netloc + \
                 ':' + str(cas_port) + url_server.path
-        service_url = urllib.quote(cur_url, safe='')
+        service_url = urllib.request.quote(cur_url, safe='')
         # The login function, from pycas, check if the ticket given
         # by CAS is a real ticket. The login of the user
         # connected by CAS is returned.
@@ -140,9 +149,9 @@ class Home(main.Home):
         url = request.httprequest.url
 
         def qs(url):
-            query = urlparse.urlparse(url).query
+            query = urllib.parse.urlparse(url).query
             res = dict([
-                (k, v[0]) for k, v in urlparse.parse_qs(query).items()])
+                (k, v[0]) for k, v in urllib.parse.parse_qs(query).items()])
             res1 = {}
             if res.get('redirect', {}):
                 res1 = qs(res.get('redirect', {}))

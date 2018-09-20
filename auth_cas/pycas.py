@@ -85,11 +85,11 @@
 #  Imports
 # -----------------------------------------------------------------------
 import os
-import md5
+import hashlib
 import time
 import urllib
-import urllib2
-import urlparse
+import ssl
+
 
 # -----------------------------------------------------------------------
 #  Constants
@@ -143,21 +143,21 @@ def writelog(msg):
 """
 
 
-def parse_tag(str, tag):
+def parse_tag(astr, tag):
     """
     Used for parsing xml.  Search str for first occurance of
     <tag>.....</tag> and return text (striped of leading and
     trailing whitespace) between tags.  Return "" if tag not
     found.
     """
-    tag1_pos1 = str.find("<" + tag)
+    tag1_pos1 = astr.find("<" + str(tag))
     #  No tag found, return empty string.
     if tag1_pos1 == -1:
         return ""
-    tag1_pos2 = str.find(">", tag1_pos1)
+    tag1_pos2 = astr.find(">", tag1_pos1)
     if tag1_pos2 == -1:
         return ""
-    tag2_pos1 = str.find("</" + tag, tag1_pos2)
+    tag2_pos1 = astr.find("</" + tag, tag1_pos2)
     if tag2_pos1 == -1:
         return ""
     return str[tag1_pos2 + 1:tag2_pos1].strip()
@@ -169,12 +169,12 @@ def split2(str, sep):
     return parts[0], parts[1]
 
 
-def makehash(str, secret=SECRET):
+def makehash(astr, secret=SECRET):
     """ Use hash and secret to encrypt string. """
-    m = md5.new()
-    m.update(str)
-    m.update(SECRET)
-    return m.hexdigest()[0:8]
+    m = hashlib.md5()
+    m.update(astr)
+    m.update(secret)
+    return m.digest()[0:8]
 
 
 def make_pycas_cookie(val, domain, path, secure, expires=None):
@@ -192,11 +192,15 @@ def do_redirect(cas_host, service_url, opt, secure):
     """ Send redirect to client.  This function does not return,\
     i.e. it teminates this script. """
     cas_url = cas_host + "/login?service=" + service_url
-    urllib2.urlopen(cas_url)
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    urllib.request.urlopen(cas_url, context=ctx)
     if opt in ("renew", "gateway"):
         cas_url += "&%s=true" % opt
     if opt == "gateway":
-        domain, path = urlparse.urlparse(service_url)[1:3]
+        domain, path = urllib.parse.urlparse(service_url)[1:3]
 
 
 def decode_cookie(cookie_vals, lifetime=None):
@@ -261,7 +265,12 @@ def validate_cas_1(cas_host, service_url, ticket):
     #  Second Call to CAS server: Ticket found, verify it.
     cas_validate = \
         cas_host + "/validate?ticket=" + ticket + "&service=" + service_url
-    f_validate = urllib.urlopen(cas_validate)
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    f_validate = urllib.request.urlopen(cas_validate, context=ctx)
+    
     #  Get first line - should be yes or no
     response = f_validate.readline()
     #  Ticket does not validate, return error
@@ -289,9 +298,15 @@ def validate_cas_2(cas_host, service_url, ticket, opt):
         service_url
     if opt:
         cas_validate += "&%s=true" % opt
-    f_validate = urllib.urlopen(cas_validate)
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    f_validate = urllib.request.urlopen(cas_validate, context=ctx)
+
     #  Get first line - should be yes or no
-    response = f_validate.read()
+    response = str(f_validate.read())
+
     id = parse_tag(response, "cas:user")
     #  Ticket does not validate, return error
     if id == "":
@@ -305,7 +320,7 @@ def validate_cas_2(cas_host, service_url, ticket, opt):
 
 def validate_cas_3(cas_host, service_url, ticket, opt):
     """
-    Validate ticket using cas 2.0 protocol
+    Validate ticket using cas 3.0 protocol
     The 2.0 protocol allows the use of the mutually
     exclusive "renew" and "gateway" options.
     """
@@ -315,7 +330,12 @@ def validate_cas_3(cas_host, service_url, ticket, opt):
         service_url + "&ticket=" + ticket
     if opt:
         cas_validate += "&%s=true" % opt
-    f_validate = urllib.urlopen(cas_validate)
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    f_validate = urllib.request.urlopen(cas_validate, context=ctx)
+    
     #  Get first line - should be yes or no
     response = f_validate.read()
     id = parse_tag(response, "cas:user")
@@ -378,8 +398,8 @@ def get_ticket_status(cas_host, service_url, ticket, protocol, opt):
 # -----------------------------------------------------------------------
 
 
-def login(cas_host, service_url, ticket, lifetime=None, secure=1,
-          protocol=3, path="/", opt=""):
+def login(cas_host, service_url, ticket, lifetime=None, secure=0,
+          protocol=2, path="/", opt=""):
     """
     Login to cas and return user id.
     Returns status, id, pycas_cookie.
@@ -412,7 +432,8 @@ def login(cas_host, service_url, ticket, lifetime=None, secure=1,
         timestr = str(int(time.time()))
         hash = makehash(timestr + ":" + id)
         cookie_val = hash + timestr + ":" + id
-        domain = urlparse.urlparse(service_url)[1]
+
+        domain = urllib.parse.urlparse(service_url)[1]
         return CAS_OK, id, make_pycas_cookie(cookie_val, domain, path, secure)
 
     elif ticket_status == TICKET_INVALID:
@@ -425,7 +446,7 @@ def login(cas_host, service_url, ticket, lifetime=None, secure=1,
     #  pycas cookie (which was set to gateway by do_redirect()).
     if opt == "gateway":
         if cookie_status == COOKIE_GATEWAY:
-            domain, path = urlparse.urlparse(service_url)[1:3]
+            domain, path = urllib.parse.urlparse(service_url)[1:3]
             #  Set cookie expiration in the past to clear the cookie.
             past_date = time.strftime(
                 "%a, %d-%b-%Y %H:%M:%S %Z",
